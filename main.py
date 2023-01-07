@@ -2,6 +2,8 @@ import gc
 import machine
 import time
 
+import notes
+
 gc.enable()
 
 TOPIC_SAMPLES = b"/lotina/audio/samples"
@@ -48,9 +50,9 @@ class LotinaEngine:
         print("soap time...")
         self._state = STATE_SOAP
         self._timestamp = time.time()
-        # TODO: 🎵 here goes music 🎵
         self._signal_ping.value(1)
-        time.sleep(20)
+        notes.play_song(self._signal_ping)
+        notes.play_song(self._signal_ping)
 
     def _transit_to_post_rinse(self):
         print("rinse time...")
