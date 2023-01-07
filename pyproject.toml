@@ -1,0 +1,27 @@
+[tool.poetry]
+name = "lotina"
+version = "0.1.0"
+description = "ML based musical box"
+authors = ["Jaakko Moisio <jaakko@moisio.fi>"]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.11"
+adafruit-ampy = "^1.1.0"
+sqlalchemy = {extras = ["mysql"], version = "^1.4.46"}
+numpy = "^1.24.1"
+pandas = "^1.5.2"
+matplotlib = "^3.6.2"
+seaborn = "^0.12.2"
+paho-mqtt = "^1.6.1"
+tensorflow = "^2.11.0"
+python-dotenv = "^0.21.0"
+click = "^8.1.3"
+
+[tool.poetry.dev-dependencies]
+
+[tool.poetry.group.dev.dependencies]
+black = "^22.12.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
