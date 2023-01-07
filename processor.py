@@ -12,6 +12,7 @@ from model import prepare_samples
 import db
 
 TOPIC_SUB = "/lotina/audio/samples"
+TOPIC_PREDICTION = "/lotina/audio/prediction"
 
 load_dotenv()
 
@@ -26,24 +27,27 @@ def load_model():
 
 
 class Processor:
-    def __init__(self, label, classify):
+    def __init__(self, label, classify, prediction):
         self._label = label
         self._model = load_model() if classify else None
+        self._prediction = prediction
 
     def on_connect(self, client, userdata, flags, rc):
         click.echo(f"Connected with result code: {rc}")
         client.subscribe(TOPIC_SUB)
 
     def on_message(self, client, userdata, msg):
-        click.echo(f"Received msg of size: {len(msg.payload)}")
         if self._label:
             db.engine.execute(
                 sa.insert(db.samples).values(label=self._label, data=msg.payload)
             )
+        prediction = self._prediction
         if self._model:
             samples = np.array(prepare_samples(msg.payload))
-            prediction = self._model(samples)
-            click.echo(f"Is tap prediction: {prediction[0][0]}")
+            prediction = self._model(samples)[0][0]
+            prediction = int(255 * prediction)
+        if prediction is not None:
+            client.publish(TOPIC_PREDICTION, prediction.to_bytes(1, "little"))
 
 
 def load_config():
@@ -54,9 +58,10 @@ def load_config():
 @click.command()
 @click.option("--label")
 @click.option("--classify/--no-classify", default=False)
-def main(label, classify):
+@click.option("--prediction", type=int)
+def main(label, classify, prediction):
     config = load_config()
-    recorder = Processor(label, classify)
+    recorder = Processor(label, classify, prediction)
 
     client = mqtt.Client()
     client.on_connect = recorder.on_connect
