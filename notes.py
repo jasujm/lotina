@@ -1,5 +1,3 @@
-import time
-
 NOTE_B0 = 31
 NOTE_C1 = 33
 NOTE_CS1 = 35
@@ -90,81 +88,102 @@ NOTE_CS8 = 4435
 NOTE_D8 = 4699
 NOTE_DS8 = 4978
 
-
-def play_note(pin, note, duration):
-    half_cycle = 500000 // note
-    time_remaining = 1000000 // duration
-    value = 1
-    while time_remaining > 0:
-        pin.value(value)
-        value = 1 - value
-        time.sleep_us(half_cycle)
-        time_remaining -= half_cycle
-    pin.value(0)
+RATE = 22050
+BITS = 16
 
 
-def pause(duration):
-    time.sleep_us(1000000 // duration)
+def tone_to_samples(frequency):
+    import math
+    import struct
+
+    # create a buffer containing the pure tone samples
+    samples_per_cycle = RATE // frequency
+    sample_size_in_bytes = BITS // 8
+    samples = bytearray(samples_per_cycle * sample_size_in_bytes)
+    volume_reduction_factor = 4
+    range_ = pow(2, BITS) // 2 // volume_reduction_factor
+
+    for i in range(samples_per_cycle):
+        sample = range_ + int(
+            (range_ - 1) * math.sin(2 * math.pi * i / samples_per_cycle)
+        )
+        struct.pack_into("<h", samples, i * sample_size_in_bytes, sample)
+
+    return samples
 
 
-def play_song(pin):
-    play_note(pin, NOTE_B4, 4)
-    play_note(pin, NOTE_A4, 8)
-    play_note(pin, NOTE_G4, 8)
-    play_note(pin, NOTE_G4, 2)
+def play_note(write_audio, note, duration):
+    samples = tone_to_samples(note)
+    repeats = 2 * RATE // (duration * len(samples))
+    for i in range(repeats):
+        write_audio(samples)
 
-    play_note(pin, NOTE_B4, 4)
-    play_note(pin, NOTE_A4, 8)
-    play_note(pin, NOTE_G4, 8)
-    play_note(pin, NOTE_G4, 4)
-    pause(8)
-    play_note(pin, NOTE_G4, 8)
 
-    play_note(pin, NOTE_E4, 4)
-    play_note(pin, NOTE_G4, 4)
-    play_note(pin, NOTE_G4, 4)
-    play_note(pin, NOTE_E4, 4)
+def pause(write_audio, duration):
+    samples = bytearray(1024)
+    repeats = 2 * RATE // (duration * len(samples))
+    for i in range(repeats):
+        write_audio(samples)
 
-    play_note(pin, NOTE_B4, 4)
-    play_note(pin, NOTE_A4, 4)
-    pause(4)
-    pause(8)
-    play_note(pin, NOTE_G4, 8)
 
-    play_note(pin, NOTE_B4, 4)
-    play_note(pin, NOTE_B4, 4)
-    play_note(pin, NOTE_G4, 4)
-    play_note(pin, NOTE_E4, 4)
+def play_song(write_audio):
+    play_note(write_audio, NOTE_B4, 4)
+    play_note(write_audio, NOTE_A4, 8)
+    play_note(write_audio, NOTE_G4, 8)
+    play_note(write_audio, NOTE_G4, 2)
 
-    play_note(pin, NOTE_G4, 4)
-    play_note(pin, NOTE_E4, 4)
-    pause(4)
-    pause(8)
-    play_note(pin, NOTE_E4, 8)
+    play_note(write_audio, NOTE_B4, 4)
+    play_note(write_audio, NOTE_A4, 8)
+    play_note(write_audio, NOTE_G4, 8)
+    play_note(write_audio, NOTE_G4, 4)
+    pause(write_audio, 8)
+    play_note(write_audio, NOTE_G4, 8)
 
-    play_note(pin, NOTE_G4, 4)
-    play_note(pin, NOTE_E4, 4)
-    play_note(pin, NOTE_G4, 4)
-    play_note(pin, NOTE_E4, 4)
+    play_note(write_audio, NOTE_E4, 4)
+    play_note(write_audio, NOTE_G4, 4)
+    play_note(write_audio, NOTE_G4, 4)
+    play_note(write_audio, NOTE_E4, 4)
 
-    play_note(pin, NOTE_A4, 2)
-    pause(2)
+    play_note(write_audio, NOTE_B4, 4)
+    play_note(write_audio, NOTE_A4, 4)
+    pause(write_audio, 4)
+    pause(write_audio, 8)
+    play_note(write_audio, NOTE_G4, 8)
 
-    play_note(pin, NOTE_B4, 4)
-    play_note(pin, NOTE_B4, 4)
-    play_note(pin, NOTE_G4, 4)
-    play_note(pin, NOTE_E4, 4)
+    play_note(write_audio, NOTE_B4, 4)
+    play_note(write_audio, NOTE_B4, 4)
+    play_note(write_audio, NOTE_G4, 4)
+    play_note(write_audio, NOTE_E4, 4)
 
-    play_note(pin, NOTE_G4, 4)
-    play_note(pin, NOTE_G4, 4)
-    play_note(pin, NOTE_G4, 4)
-    play_note(pin, NOTE_G4, 8)
-    pause(8)
+    play_note(write_audio, NOTE_G4, 4)
+    play_note(write_audio, NOTE_E4, 4)
+    pause(write_audio, 4)
+    pause(write_audio, 8)
+    play_note(write_audio, NOTE_E4, 8)
 
-    play_note(pin, NOTE_E4, 4)
-    play_note(pin, NOTE_G4, 4)
-    play_note(pin, NOTE_G4, 4)
-    play_note(pin, NOTE_E4, 4)
+    play_note(write_audio, NOTE_G4, 4)
+    play_note(write_audio, NOTE_E4, 4)
+    play_note(write_audio, NOTE_G4, 4)
+    play_note(write_audio, NOTE_E4, 4)
 
-    play_note(pin, NOTE_A4, 2)
-    pause(2)
+    play_note(write_audio, NOTE_A4, 2)
+    pause(write_audio, 2)
+
+    play_note(write_audio, NOTE_B4, 4)
+    play_note(write_audio, NOTE_B4, 4)
+    play_note(write_audio, NOTE_G4, 4)
+    play_note(write_audio, NOTE_E4, 4)
+
+    play_note(write_audio, NOTE_G4, 4)
+    play_note(write_audio, NOTE_G4, 4)
+    play_note(write_audio, NOTE_G4, 4)
+    play_note(write_audio, NOTE_G4, 8)
+    pause(write_audio, 8)
+
+    play_note(write_audio, NOTE_E4, 4)
+    play_note(write_audio, NOTE_G4, 4)
+    play_note(write_audio, NOTE_G4, 4)
+    play_note(write_audio, NOTE_E4, 4)
+
+    play_note(write_audio, NOTE_A4, 2)
+    pause(write_audio, 2)

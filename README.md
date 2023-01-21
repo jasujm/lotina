@@ -21,6 +21,7 @@ by installing the dependencies, then uploading the application to ESP32
 
 ```
 $ poetry install
+$ poetry run ampy --port /dev/ttyUSB0 put notes.py
 $ poetry run ampy --port /dev/ttyUSB0 put main.py
 $ poetry run ampy --port /dev/ttyUSB0 put lotina.conf
 ```

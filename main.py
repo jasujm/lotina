@@ -36,33 +36,29 @@ def init_wifi(ssid, passwd):
 
 
 class LotinaEngine:
-    def __init__(self):
-        self._signal_ping = machine.Pin(25, machine.Pin.OUT)
+    def __init__(self, write_audio):
+        self._write_audio = write_audio
         self._predictions = []
         self._timestamp = time.time()
         self._transit_to_idle()
 
     def _transit_to_pre_rinse(self):
         self._state = STATE_PRE_RINSE
-        self._signal_ping.value(0)
 
     def _transit_to_soap(self):
         print("soap time...")
         self._state = STATE_SOAP
         self._timestamp = time.time()
-        self._signal_ping.value(1)
-        notes.play_song(self._signal_ping)
-        notes.play_song(self._signal_ping)
+        notes.play_song(self._write_audio)
+        notes.play_song(self._write_audio)
 
     def _transit_to_post_rinse(self):
         print("rinse time...")
         self._state = STATE_POST_RINSE
         self._timestamp = time.time()
-        self._signal_ping.value(0)
 
     def _transit_to_idle(self):
         self._state = STATE_IDLE
-        self._signal_ping.value(0)
 
     def handle_tick(self):
         if self._state == STATE_IDLE:
@@ -93,14 +89,14 @@ def process_messages(mqtt_broker, mqtt_user, mqtt_passwd):
     import time
     import ubinascii
 
-    sck_pin = machine.Pin(14)
-    ws_pin = machine.Pin(13)
-    sd_pin = machine.Pin(12)
+    sck_pin_in = machine.Pin(14)
+    ws_pin_in = machine.Pin(13)
+    sd_pin_in = machine.Pin(12)
     audio_in = machine.I2S(
         0,
-        sck=sck_pin,
-        ws=ws_pin,
-        sd=sd_pin,
+        sck=sck_pin_in,
+        ws=ws_pin_in,
+        sd=sd_pin_in,
         mode=machine.I2S.RX,
         bits=32,
         format=machine.I2S.MONO,
@@ -109,7 +105,22 @@ def process_messages(mqtt_broker, mqtt_user, mqtt_passwd):
     )
     samples = bytearray(8192)
 
-    engine = LotinaEngine()
+    sck_pin_out = machine.Pin(32)
+    ws_pin_out = machine.Pin(25)
+    sd_pin_out = machine.Pin(33)
+    audio_out = machine.I2S(
+        1,
+        sck=sck_pin_out,
+        ws=ws_pin_out,
+        sd=sd_pin_out,
+        mode=machine.I2S.TX,
+        bits=notes.BITS,
+        format=machine.I2S.MONO,
+        rate=notes.RATE,
+        ibuf=20000,
+    )
+
+    engine = LotinaEngine(audio_out.write)
 
     client_id = ubinascii.hexlify(machine.unique_id())
     client = MQTTClient(client_id, mqtt_broker, user=mqtt_user, password=mqtt_passwd)
