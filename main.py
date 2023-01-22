@@ -14,6 +14,24 @@ STATE_PRE_RINSE = 1
 STATE_SOAP = 2
 STATE_POST_RINSE = 3
 
+SCK_PIN_IN = machine.Pin(32)   # audio in BCLK
+WS_PIN_IN = machine.Pin(25)    # audio in LRC
+SD_PIN_IN = machine.Pin(33)    # audio in Dout
+SCK_PIN_OUT = machine.Pin(14)  # audio out BCLK
+WS_PIN_OUT = machine.Pin(13)   # audio out LRC
+SD_PIN_OUT = machine.Pin(27)   # audio out Din
+
+AUDIO_SAMPLE_RATE = 22050
+AUDIO_SAMPLE_BITS = 16
+AUDIO_SAMPLE_BUFFER_LENGTH = 8192
+
+TICK_MS = 500
+
+N_PREDICTIONS = 5
+DETECTION_THRESHOLD = 127
+N_DETECTIONS = 2
+RINSE_TIMEOUT_S = 20
+
 
 def load_config():
     import json
@@ -62,16 +80,26 @@ class LotinaEngine:
 
     def handle_tick(self):
         if self._state == STATE_IDLE:
-            if sum(prediction > 127 for prediction in self._predictions) >= 2:
+            if (
+                sum(
+                    prediction > DETECTION_THRESHOLD for prediction in self._predictions
+                )
+                >= N_DETECTIONS
+            ):
                 self._transit_to_pre_rinse()
         elif self._state == STATE_PRE_RINSE:
-            if sum(prediction > 127 for prediction in self._predictions) < 2:
+            if (
+                sum(
+                    prediction > DETECTION_THRESHOLD for prediction in self._predictions
+                )
+                < N_DETECTIONS
+            ):
                 self._transit_to_soap()
         elif self._state == STATE_SOAP:
-            if time.time() - self._timestamp >= 20:
+            if time.time() - self._timestamp >= RINSE_TIMEOUT_S:
                 self._transit_to_post_rinse()
         elif self._state == STATE_POST_RINSE:
-            if time.time() - self._timestamp >= 20:
+            if time.time() - self._timestamp >= RINSE_TIMEOUT_S:
                 self._transit_to_idle()
 
     def handle_msg(self, topic, msg):
@@ -80,7 +108,7 @@ class LotinaEngine:
 
         prediction = int.from_bytes(msg, "little")
         self._predictions.append(prediction)
-        if len(self._predictions) > 5:
+        if len(self._predictions) > N_PREDICTIONS:
             self._predictions.pop(0)
 
 
@@ -89,30 +117,24 @@ def process_messages(mqtt_broker, mqtt_user, mqtt_passwd):
     import time
     import ubinascii
 
-    sck_pin_in = machine.Pin(14)
-    ws_pin_in = machine.Pin(13)
-    sd_pin_in = machine.Pin(12)
     audio_in = machine.I2S(
         0,
-        sck=sck_pin_in,
-        ws=ws_pin_in,
-        sd=sd_pin_in,
+        sck=SCK_PIN_IN,
+        ws=WS_PIN_IN,
+        sd=SD_PIN_IN,
         mode=machine.I2S.RX,
-        bits=32,
+        bits=AUDIO_SAMPLE_BITS,
         format=machine.I2S.MONO,
-        rate=22050,
-        ibuf=8192,
+        rate=AUDIO_SAMPLE_RATE,
+        ibuf=AUDIO_SAMPLE_BUFFER_LENGTH,
     )
-    samples = bytearray(8192)
+    samples = bytearray(AUDIO_SAMPLE_BUFFER_LENGTH)
 
-    sck_pin_out = machine.Pin(32)
-    ws_pin_out = machine.Pin(25)
-    sd_pin_out = machine.Pin(33)
     audio_out = machine.I2S(
         1,
-        sck=sck_pin_out,
-        ws=ws_pin_out,
-        sd=sd_pin_out,
+        sck=SCK_PIN_OUT,
+        ws=WS_PIN_OUT,
+        sd=SD_PIN_OUT,
         mode=machine.I2S.TX,
         bits=notes.BITS,
         format=machine.I2S.MONO,
@@ -131,7 +153,7 @@ def process_messages(mqtt_broker, mqtt_user, mqtt_passwd):
     while True:
         audio_in.readinto(samples)
         client.publish(TOPIC_SAMPLES, samples)
-        time.sleep_ms(500)
+        time.sleep_ms(TICK_MS)
         client.check_msg()
         engine.handle_tick()
 

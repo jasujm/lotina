@@ -90,6 +90,8 @@ NOTE_DS8 = 4978
 
 RATE = 22050
 BITS = 16
+VOLUME_REDUCTION_FACTOR = 4
+BASE_DURATION = 2
 
 
 def tone_to_samples(frequency):
@@ -100,8 +102,7 @@ def tone_to_samples(frequency):
     samples_per_cycle = RATE // frequency
     sample_size_in_bytes = BITS // 8
     samples = bytearray(samples_per_cycle * sample_size_in_bytes)
-    volume_reduction_factor = 4
-    range_ = pow(2, BITS) // 2 // volume_reduction_factor
+    range_ = pow(2, BITS) // 2 // VOLUME_REDUCTION_FACTOR
 
     for i in range(samples_per_cycle):
         sample = range_ + int(
@@ -114,14 +115,14 @@ def tone_to_samples(frequency):
 
 def play_note(write_audio, note, duration):
     samples = tone_to_samples(note)
-    repeats = 2 * RATE // (duration * len(samples))
+    repeats = BASE_DURATION * RATE // (duration * len(samples))
     for i in range(repeats):
         write_audio(samples)
 
 
 def pause(write_audio, duration):
     samples = bytearray(1024)
-    repeats = 2 * RATE // (duration * len(samples))
+    repeats = BASE_DURATION * RATE // (duration * len(samples))
     for i in range(repeats):
         write_audio(samples)
 
