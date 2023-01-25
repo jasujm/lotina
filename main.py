@@ -14,12 +14,12 @@ STATE_PRE_RINSE = 1
 STATE_SOAP = 2
 STATE_POST_RINSE = 3
 
-SCK_PIN_IN = machine.Pin(32)   # audio in BCLK
-WS_PIN_IN = machine.Pin(25)    # audio in LRC
-SD_PIN_IN = machine.Pin(33)    # audio in Dout
+SCK_PIN_IN = machine.Pin(32)  # audio in BCLK
+WS_PIN_IN = machine.Pin(25)  # audio in LRC
+SD_PIN_IN = machine.Pin(33)  # audio in Dout
 SCK_PIN_OUT = machine.Pin(14)  # audio out BCLK
-WS_PIN_OUT = machine.Pin(13)   # audio out LRC
-SD_PIN_OUT = machine.Pin(27)   # audio out Din
+WS_PIN_OUT = machine.Pin(13)  # audio out LRC
+SD_PIN_OUT = machine.Pin(27)  # audio out Din
 
 AUDIO_SAMPLE_RATE = 22050
 AUDIO_SAMPLE_BITS = 16
