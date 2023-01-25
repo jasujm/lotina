@@ -6,9 +6,6 @@ import notes
 
 gc.enable()
 
-TOPIC_SAMPLES = b"/lotina/audio/samples"
-TOPIC_PREDICTION = b"/lotina/audio/prediction"
-
 STATE_IDLE = 0
 STATE_PRE_RINSE = 1
 STATE_SOAP = 2
@@ -103,16 +100,13 @@ class LotinaEngine:
                 self._transit_to_idle()
 
     def handle_msg(self, topic, msg):
-        if topic != TOPIC_PREDICTION:
-            return
-
         prediction = int.from_bytes(msg, "little")
         self._predictions.append(prediction)
         if len(self._predictions) > N_PREDICTIONS:
             self._predictions.pop(0)
 
 
-def process_messages(mqtt_broker, mqtt_user, mqtt_passwd):
+def process_messages(identity, mqtt_broker, mqtt_user, mqtt_passwd):
     from umqtt.simple import MQTTClient
     import time
     import ubinascii
@@ -148,11 +142,12 @@ def process_messages(mqtt_broker, mqtt_user, mqtt_passwd):
     client = MQTTClient(client_id, mqtt_broker, user=mqtt_user, password=mqtt_passwd)
     client.set_callback(engine.handle_msg)
     client.connect()
-    client.subscribe(TOPIC_PREDICTION)
+    client.subscribe(f"/lotina/{identity}/prediction".encode())
+    topic_samples = f"/lotina/{identity}/samples".encode()
 
     while True:
         audio_in.readinto(samples)
-        client.publish(TOPIC_SAMPLES, samples)
+        client.publish(topic_samples, samples)
         time.sleep_ms(TICK_MS)
         client.check_msg()
         engine.handle_tick()
@@ -164,6 +159,7 @@ def main():
     init_wifi(ssid=config["wlan_ssid"], passwd=config["wlan_passwd"])
     print("starting the processor...")
     process_messages(
+        identity=config["identity"],
         mqtt_broker=config["mqtt_broker"],
         mqtt_user=config["mqtt_user"],
         mqtt_passwd=config["mqtt_passwd"],

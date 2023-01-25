@@ -1,4 +1,3 @@
-import json
 import os
 import sys
 
@@ -11,8 +10,7 @@ import sqlalchemy as sa
 from model import prepare_samples
 import db
 
-TOPIC_SUB = "/lotina/audio/samples"
-TOPIC_PREDICTION = "/lotina/audio/prediction"
+TOPIC_SUB = "/lotina/+/samples"
 
 load_dotenv()
 
@@ -44,12 +42,9 @@ class Processor:
             prediction = self._model(samples)[0][0]
             prediction = int(255 * prediction)
         if prediction is not None:
-            client.publish(TOPIC_PREDICTION, prediction.to_bytes(1, "little"))
-
-
-def load_config():
-    with open("lotina.conf") as f:
-        return json.load(f)
+            prediction_topic = msg.topic.replace("samples", "prediction")
+            print(prediction, prediction_topic)
+            client.publish(prediction_topic, prediction.to_bytes(1, "little"))
 
 
 @click.command()
@@ -57,7 +52,6 @@ def load_config():
 @click.option("--classify/--no-classify", default=False)
 @click.option("--prediction", type=int)
 def main(label, classify, prediction):
-    config = load_config()
     recorder = Processor(label, classify, prediction)
 
     client = mqtt.Client()
