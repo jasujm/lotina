@@ -22,6 +22,7 @@ by installing the dependencies, then uploading the application to ESP32
 
 ```
 $ poetry install
+$ cd ./esp32/
 $ poetry run ampy --port /dev/ttyUSB0 put notes.py
 $ poetry run ampy --port /dev/ttyUSB0 put main.py
 $ poetry run ampy --port /dev/ttyUSB0 put lotina.conf
@@ -32,9 +33,9 @@ ML model. Use the utilities to record audio samples of tap and other sounds, and
 train the model:
 
 ```
-$ poetry run python -m processor --label tap      # record samples from tap
-$ poetry run python -m processor --label ambient  # record sounds that are not tap
-$ poetry run python -m processor --label shower   # worth also training to tell shower and tap apart, etc.
-$ poetry run python -m modeltraining --evaluate --save
-$ poetry run python -m processor --classify       # use the saved model
+$ poetry run python -m processor --label tap       # record samples from tap
+$ poetry run python -m processor --label ambient   # record sounds that are not tap
+$ poetry run python -m processor --label shower    # worth also training to tell shower and tap apart, etc.
+$ poetry run python -m lotina.modeltraining --evaluate --save
+$ poetry run python -m lotina.processor --classify # use the saved model
 ```

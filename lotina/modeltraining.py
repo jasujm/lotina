@@ -5,8 +5,8 @@ import pandas as pd
 import seaborn as sns
 import sqlalchemy as sa
 
-import db
-from model import prepare_samples
+from . import db
+from .model import prepare_samples
 
 
 def load_and_prepare_recordings():

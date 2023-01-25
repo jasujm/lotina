@@ -7,8 +7,8 @@ import numpy as np
 import paho.mqtt.client as mqtt
 import sqlalchemy as sa
 
-from model import prepare_samples
-import db
+from . import db
+from .model import prepare_samples
 
 TOPIC_SUB = "/lotina/+/samples"
 
