@@ -43,7 +43,6 @@ class Processor:
             prediction = int(255 * prediction)
         if prediction is not None:
             prediction_topic = msg.topic.replace("samples", "prediction")
-            print(prediction, prediction_topic)
             client.publish(prediction_topic, prediction.to_bytes(1, "little"))
 
 
@@ -51,7 +50,8 @@ class Processor:
 @click.option("--label")
 @click.option("--classify/--no-classify", default=False)
 @click.option("--prediction", type=int)
-def main(label, classify, prediction):
+def process(label, classify, prediction):
+    """MQTT message processor"""
     recorder = Processor(label, classify, prediction)
 
     client = mqtt.Client()
@@ -62,7 +62,3 @@ def main(label, classify, prediction):
     client.connect(os.getenv("MQTT_BROKER"))
 
     client.loop_forever()
-
-
-if __name__ == "__main__":
-    main()

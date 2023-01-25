@@ -80,9 +80,10 @@ def plot_loss(history):
 
 
 @click.command()
-@click.option("--evaluate/--no-evaluate", default=True)
-@click.option("--save/--no-save", default=False)
-def main(evaluate, save):
+@click.option("--evaluate/--no-evaluate", default=True, help="Evaluate model")
+@click.option("--save/--no-save", default=False, help="Save model")
+def train(evaluate, save):
+    """Train model from audio samples"""
     dataset = load_and_prepare_recordings()
     if evaluate:
         (
@@ -109,7 +110,3 @@ def main(evaluate, save):
         all_features, all_labels = split_dataset_to_features_and_labels(dataset)
         model, _ = train_model(all_features, all_labels)
         model.save("lotina.tf")
-
-
-if __name__ == "__main__":
-    main()

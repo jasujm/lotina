@@ -33,9 +33,9 @@ ML model. Use the utilities to record audio samples of tap and other sounds, and
 train the model:
 
 ```
-$ poetry run python -m processor --label tap       # record samples from tap
-$ poetry run python -m processor --label ambient   # record sounds that are not tap
-$ poetry run python -m processor --label shower    # worth also training to tell shower and tap apart, etc.
-$ poetry run python -m lotina.modeltraining --evaluate --save
-$ poetry run python -m lotina.processor --classify # use the saved model
+$ poetry run python -m lotina process --label tap      # record samples from tap
+$ poetry run python -m lotina process --label ambient  # record sounds that are not tap
+$ poetry run python -m lotina process --label shower   # worth also training to tell shower and tap apart, etc.
+$ poetry run python -m lotina train --evaluate --save
+$ poetry run python -m lotina process --classify       # use the saved model
 ```
