@@ -51,8 +51,8 @@ def train_model(features, labels):
     model = keras.Sequential(
         [
             normalizer,
+            keras.layers.Dense(128, activation="relu"),
             keras.layers.Dense(64, activation="relu"),
-            keras.layers.Dense(32, activation="relu"),
             keras.layers.Dense(1, activation="sigmoid"),
         ]
     )
@@ -62,7 +62,7 @@ def train_model(features, labels):
     history = model.fit(
         features,
         labels,
-        epochs=500,
+        epochs=2000,
         validation_split=0.2,
     )
     model.summary()
