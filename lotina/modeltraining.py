@@ -6,7 +6,7 @@ import seaborn as sns
 import sqlalchemy as sa
 
 from . import db
-from .model import prepare_samples
+from .model import extract_features_from_data
 
 
 def load_and_prepare_recordings():
@@ -16,7 +16,7 @@ def load_and_prepare_recordings():
                 "is_tap": row.label == "tap",
                 **{
                     f"samples_bin_{n}": sample
-                    for (n, sample) in enumerate(prepare_samples(row.data))
+                    for (n, sample) in enumerate(extract_features_from_data(row.data))
                 },
             }
             for row in db.engine.execute(

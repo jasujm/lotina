@@ -12,7 +12,7 @@ def _get_bins(step, bound):
 BINS = _get_bins(6, 10)
 
 
-def prepare_samples(data):
+def extract_features_from_data(data):
     samples = np.frombuffer(data, dtype=np.uint32)
     transformed_samples = np.fft.fft(samples)
     binned_samples = []

@@ -8,7 +8,7 @@ import paho.mqtt.client as mqtt
 import sqlalchemy as sa
 
 from . import db
-from .model import prepare_samples
+from .model import extract_features_from_data
 
 TOPIC_SUB = "/lotina/+/samples"
 
@@ -38,7 +38,7 @@ class Processor:
             )
         prediction = self._prediction
         if self._model:
-            samples = np.array(prepare_samples(msg.payload))
+            samples = np.array(extract_features_from_data(msg.payload))
             prediction = self._model(samples)[0][0]
             prediction = int(255 * prediction)
         if prediction is not None:
