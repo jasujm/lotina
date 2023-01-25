@@ -20,10 +20,7 @@ load_dotenv()
 def load_model():
     import tensorflow.keras as keras
 
-    model = keras.models.load_model("lotina.tf")
-    model.summary()
-
-    return model
+    return keras.models.load_model("lotina.tf")
 
 
 class Processor:
