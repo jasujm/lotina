@@ -1,3 +1,5 @@
+import random
+
 import click
 import matplotlib.pyplot as plt
 import numpy as np
@@ -10,20 +12,18 @@ from .model import extract_features_from_data
 
 
 def load_and_prepare_recordings():
-    return pd.DataFrame(
-        [
-            {
-                "is_tap": row.label == "tap",
-                **{
-                    f"samples_bin_{n}": sample
-                    for (n, sample) in enumerate(extract_features_from_data(row.data))
-                },
-            }
-            for row in db.engine.execute(
-                sa.select([db.samples.c.label, db.samples.c.data])
-            )
-        ]
-    )
+    rows = [
+        {
+            "is_tap": row.label == "tap",
+            **{
+                f"samples_bin_{n}": sample
+                for (n, sample) in enumerate(extract_features_from_data(row.data))
+            },
+        }
+        for row in db.engine.execute(sa.select([db.samples.c.label, db.samples.c.data]))
+    ]
+    random.shuffle(rows)
+    return pd.DataFrame(rows)
 
 
 def split_dataset_to_features_and_labels(dataset):
@@ -42,7 +42,7 @@ def get_train_and_test_sets(dataset):
     ]
 
 
-def train_model(features, labels):
+def train_model(features, labels, *, validation_split=0.2):
     import tensorflow.keras as keras
 
     normalizer = keras.layers.Normalization()
@@ -51,8 +51,8 @@ def train_model(features, labels):
     model = keras.Sequential(
         [
             normalizer,
-            keras.layers.Dense(128, activation="relu"),
-            keras.layers.Dense(64, activation="relu"),
+            keras.layers.Dense(40, activation="relu"),
+            keras.layers.Dense(20, activation="relu"),
             keras.layers.Dense(1, activation="sigmoid"),
         ]
     )
@@ -63,7 +63,7 @@ def train_model(features, labels):
         features,
         labels,
         epochs=2000,
-        validation_split=0.2,
+        validation_split=validation_split,
     )
     model.summary()
     return model, history
@@ -104,9 +104,9 @@ def train(evaluate, save):
                 "actual": test_labels.to_numpy().flatten(),
             }
         )
-        click.echo(prediction_comparison)
+        click.echo(prediction_comparison.to_string())
 
     if save:
         all_features, all_labels = split_dataset_to_features_and_labels(dataset)
-        model, _ = train_model(all_features, all_labels)
+        model, _ = train_model(all_features, all_labels, validation_split=0.0)
         model.save("lotina.tf")

@@ -24,9 +24,9 @@ AUDIO_SAMPLE_BUFFER_LENGTH = 8192
 
 TICK_MS = 500
 
-N_PREDICTIONS = 5
+N_PREDICTIONS = 4
 DETECTION_THRESHOLD = 127
-N_DETECTIONS = 2
+N_POSITIVES_TO_DETECT = 3
 RINSE_TIMEOUT_S = 20
 
 
@@ -81,7 +81,7 @@ class LotinaEngine:
                 sum(
                     prediction > DETECTION_THRESHOLD for prediction in self._predictions
                 )
-                >= N_DETECTIONS
+                >= N_POSITIVES_TO_DETECT
             ):
                 self._transit_to_pre_rinse()
         elif self._state == STATE_PRE_RINSE:
@@ -89,7 +89,7 @@ class LotinaEngine:
                 sum(
                     prediction > DETECTION_THRESHOLD for prediction in self._predictions
                 )
-                < N_DETECTIONS
+                < N_POSITIVES_TO_DETECT
             ):
                 self._transit_to_soap()
         elif self._state == STATE_SOAP:
