@@ -14,7 +14,7 @@ from .model import extract_features_from_data
 def load_and_prepare_recordings():
     rows = [
         {
-            "is_tap": row.label == "tap",
+            "is_tap": row.label.startswith("tap"),
             **{
                 f"samples_bin_{n}": sample
                 for (n, sample) in enumerate(extract_features_from_data(row.data))
