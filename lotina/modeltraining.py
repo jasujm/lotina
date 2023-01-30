@@ -42,7 +42,7 @@ def get_train_and_test_sets(dataset):
     ]
 
 
-def train_model(features, labels, *, validation_split=0.2):
+def train_model(features, labels, *, epochs=2000, validation_split=0.2):
     import tensorflow.keras as keras
 
     normalizer = keras.layers.Normalization()
@@ -62,7 +62,7 @@ def train_model(features, labels, *, validation_split=0.2):
     history = model.fit(
         features,
         labels,
-        epochs=2000,
+        epochs=epochs,
         validation_split=validation_split,
     )
     model.summary()
@@ -108,5 +108,7 @@ def train(evaluate, save):
 
     if save:
         all_features, all_labels = split_dataset_to_features_and_labels(dataset)
-        model, _ = train_model(all_features, all_labels, validation_split=0.0)
+        model, _ = train_model(
+            all_features, all_labels, epochs=5000, validation_split=0.0
+        )
         model.save("lotina.tf")
