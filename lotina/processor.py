@@ -5,9 +5,7 @@ import click
 from dotenv import load_dotenv
 import numpy as np
 import paho.mqtt.client as mqtt
-import sqlalchemy as sa
 
-from . import db
 from .model import extract_features_from_data
 
 TOPIC_SUB = "/lotina/+/samples"
@@ -19,6 +17,13 @@ def load_model():
     import tensorflow.keras as keras
 
     return keras.models.load_model("lotina.tf")
+
+
+def save_sample(label, data):
+    from sqlalchemy import insert
+    from . import db
+
+    db.engine.execute(insert(db.samples).values(label=label, data=data))
 
 
 class Processor:
@@ -33,9 +38,7 @@ class Processor:
 
     def on_message(self, client, userdata, msg):
         if self._label:
-            db.engine.execute(
-                sa.insert(db.samples).values(label=self._label, data=msg.payload)
-            )
+            save_sample(self._label, msg.payload)
         prediction = self._prediction
         if self._model:
             samples = np.array(extract_features_from_data(msg.payload))
