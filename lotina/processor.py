@@ -8,7 +8,7 @@ import paho.mqtt.client as mqtt
 
 from .model import extract_features_from_data
 
-TOPIC_SUB = "/lotina/+/samples"
+TOPIC_SUB = "lotina/+/samples"
 
 load_dotenv()
 
@@ -45,7 +45,7 @@ class Processor:
             prediction = self._model(samples)[0][0]
             prediction = int(255 * prediction)
         if prediction is not None:
-            prediction_topic = msg.topic.replace("samples", "prediction")
+            prediction_topic = msg.topic.replace("/samples", "/prediction")
             client.publish(prediction_topic, prediction.to_bytes(1, "little"))
 
 

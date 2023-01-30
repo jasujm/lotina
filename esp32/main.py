@@ -142,8 +142,8 @@ def process_messages(identity, mqtt_broker, mqtt_user, mqtt_passwd):
     client = MQTTClient(client_id, mqtt_broker, user=mqtt_user, password=mqtt_passwd)
     client.set_callback(engine.handle_msg)
     client.connect()
-    client.subscribe(f"/lotina/{identity}/prediction".encode())
-    topic_samples = f"/lotina/{identity}/samples".encode()
+    client.subscribe(f"lotina/{identity}/prediction".encode())
+    topic_samples = f"lotina/{identity}/samples".encode()
 
     while True:
         audio_in.readinto(samples)
