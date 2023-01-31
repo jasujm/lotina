@@ -1,5 +1,8 @@
 # Lotina: The machine learning powered musical soap dispenser
 
+![Lotina board and wiring](img/lotina_board.jpg)
+![Lotina housing](img/lotina_housing.jpg)
+
 Musical soap dispenser is a soap dispenser that plays music while you’re rubbing
 soap to your hands.
 
