@@ -1,9 +1,11 @@
 import click
 import logging
 
+
 @click.group()
 def cli():
     """The machine learning powered musical soap dispenser"""
+
 
 try:
     from .processor import process

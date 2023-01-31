@@ -7,9 +7,9 @@ import notes
 gc.enable()
 
 STATE_IDLE = 0
-STATE_PRE_RINSE = 1
+STATE_HAND_WASHING_DETECTED = 1
 STATE_SOAP = 2
-STATE_POST_RINSE = 3
+STATE_HAND_WASHING_OVER = 3
 
 SCK_PIN_IN = machine.Pin(32)  # audio in BCLK
 WS_PIN_IN = machine.Pin(25)  # audio in LRC
@@ -27,7 +27,8 @@ TICK_MS = 500
 N_PREDICTIONS = 4
 DETECTION_THRESHOLD = 127
 N_POSITIVES_TO_DETECT = 3
-RINSE_TIMEOUT_S = 20
+HAND_WASHING_DETECTED_TIMEOUT_S = 3
+HAND_WASHING_OVER_TIMEOUT_S = 20
 
 
 def load_config():
@@ -57,22 +58,24 @@ class LotinaEngine:
         self._timestamp = time.time()
         self._transit_to_idle()
 
-    def _transit_to_pre_rinse(self):
-        self._state = STATE_PRE_RINSE
+    def _transit_to_hand_washing_detected(self):
+        print("hand washing detected...")
+        self._state = STATE_HAND_WASHING_DETECTED
+        self._timestamp = time.time()
 
     def _transit_to_soap(self):
         print("soap time...")
         self._state = STATE_SOAP
-        self._timestamp = time.time()
         notes.play_song(self._write_audio)
         notes.play_song(self._write_audio)
 
-    def _transit_to_post_rinse(self):
-        print("rinse time...")
-        self._state = STATE_POST_RINSE
+    def _transit_to_hand_washing_over(self):
+        print("hand washing over...")
+        self._state = STATE_HAND_WASHING_OVER
         self._timestamp = time.time()
 
     def _transit_to_idle(self):
+        print("waiting for hand washing...")
         self._state = STATE_IDLE
 
     def handle_tick(self):
@@ -83,20 +86,20 @@ class LotinaEngine:
                 )
                 >= N_POSITIVES_TO_DETECT
             ):
-                self._transit_to_pre_rinse()
-        elif self._state == STATE_PRE_RINSE:
+                self._transit_to_hand_washing_detected()
+        elif self._state == STATE_HAND_WASHING_DETECTED:
+            if time.time() - self._timestamp >= HAND_WASHING_DETECTED_TIMEOUT_S:
+                self._transit_to_soap()
+        elif self._state == STATE_SOAP:
             if (
                 sum(
                     prediction > DETECTION_THRESHOLD for prediction in self._predictions
                 )
                 < N_POSITIVES_TO_DETECT
             ):
-                self._transit_to_soap()
-        elif self._state == STATE_SOAP:
-            if time.time() - self._timestamp >= RINSE_TIMEOUT_S:
-                self._transit_to_post_rinse()
-        elif self._state == STATE_POST_RINSE:
-            if time.time() - self._timestamp >= RINSE_TIMEOUT_S:
+                self._transit_to_hand_washing_over()
+        elif self._state == STATE_HAND_WASHING_OVER:
+            if time.time() - self._timestamp >= HAND_WASHING_OVER_TIMEOUT_S:
                 self._transit_to_idle()
 
     def handle_msg(self, topic, msg):

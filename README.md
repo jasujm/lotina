@@ -6,8 +6,9 @@ soap to your hands.
 In typical musical soap dispensers, the music functionality is integrated to the
 dispenser, activating when the soap is dispenser. **Lotina** (Finnish for
 *squelch*) does something a little different. It’s a separate device that
-records sounds and recognized when tap is opened and then closed. After closing
-the tap and taking soap, it starts playing music until it’s time to rinse again.
+records sounds and recognized when tap is opened. After detecting hand washing
+by the sound of water running from tap, it starts playing music until it’s time
+to rinse again.
 
 Hence the product description: a musical soap dispenser powered by machine
 learning.
