@@ -1,0 +1,9 @@
+name: "Lotina"
+description: "The machine learning powered musical soap dispenser"
+version: "0.1"
+slug: "lotina"
+init: false
+arch:
+  - aarch64
+services:
+  - mqtt:need

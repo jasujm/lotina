@@ -40,3 +40,20 @@ $ poetry run python -m lotina process --label shower   # worth also training to 
 $ poetry run python -m lotina train --evaluate --save
 $ poetry run python -m lotina process --classify       # use the saved model
 ```
+
+## The “cloud” integration
+
+Lotina can be deployed to ~~the cloud~~ a [Raspberry Pi
+4](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/) running [Home
+Assistant](https://www.home-assistant.io/). Why Home Assistant? Well, that’s the
+one piece of software in my house I keep running at all times. And maybe it can
+help later to define home automations based on the hand washing frequency, who
+knows.
+
+After building the model, copy the contents of the `homeassistant/` directory to
+the `/addons` directory on the host, and install as a [local
+addon](https://developers.home-assistant.io/docs/add-ons/tutorial#step-2-installing-and-testing-your-add-on).
+
+```
+rsync -avzL homeassistant/ root@homeassistant.local:/addons/lotina
+```
