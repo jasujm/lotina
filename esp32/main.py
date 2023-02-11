@@ -14,9 +14,6 @@ STATE_HAND_WASHING_OVER = 3
 SCK_PIN_IN = machine.Pin(32)  # audio in BCLK
 WS_PIN_IN = machine.Pin(25)  # audio in LRC
 SD_PIN_IN = machine.Pin(33)  # audio in Dout
-SCK_PIN_OUT = machine.Pin(14)  # audio out BCLK
-WS_PIN_OUT = machine.Pin(13)  # audio out LRC
-SD_PIN_OUT = machine.Pin(27)  # audio out Din
 
 AUDIO_SAMPLE_RATE = 22050
 AUDIO_SAMPLE_BITS = 16
@@ -52,8 +49,8 @@ def init_wifi(ssid, passwd):
 
 
 class LotinaEngine:
-    def __init__(self, write_audio):
-        self._write_audio = write_audio
+    def __init__(self, song_url):
+        self._song_url = song_url
         self._predictions = []
         self._timestamp = time.time()
         self._transit_to_idle()
@@ -66,8 +63,7 @@ class LotinaEngine:
     def _transit_to_soap(self):
         print("soap time...")
         self._state = STATE_SOAP
-        notes.play_song(self._write_audio)
-        notes.play_song(self._write_audio)
+        notes.play(self._song_url)
 
     def _transit_to_hand_washing_over(self):
         print("hand washing over...")
@@ -109,7 +105,7 @@ class LotinaEngine:
             self._predictions.pop(0)
 
 
-def process_messages(identity, mqtt_broker, mqtt_user, mqtt_passwd):
+def process_messages(identity, mqtt_broker, mqtt_user, mqtt_passwd, song_url):
     from umqtt.simple import MQTTClient
     import time
     import ubinascii
@@ -127,19 +123,7 @@ def process_messages(identity, mqtt_broker, mqtt_user, mqtt_passwd):
     )
     samples = bytearray(AUDIO_SAMPLE_BUFFER_LENGTH)
 
-    audio_out = machine.I2S(
-        1,
-        sck=SCK_PIN_OUT,
-        ws=WS_PIN_OUT,
-        sd=SD_PIN_OUT,
-        mode=machine.I2S.TX,
-        bits=notes.BITS,
-        format=machine.I2S.MONO,
-        rate=notes.RATE,
-        ibuf=20000,
-    )
-
-    engine = LotinaEngine(audio_out.write)
+    engine = LotinaEngine(song_url)
 
     client_id = ubinascii.hexlify(machine.unique_id())
     client = MQTTClient(client_id, mqtt_broker, user=mqtt_user, password=mqtt_passwd)
@@ -166,6 +150,7 @@ def main():
         mqtt_broker=config["mqtt_broker"],
         mqtt_user=config["mqtt_user"],
         mqtt_passwd=config["mqtt_passwd"],
+        song_url=config["song_url"],
     )
 
 

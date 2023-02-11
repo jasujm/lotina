@@ -1,190 +1,74 @@
-NOTE_B0 = 31
-NOTE_C1 = 33
-NOTE_CS1 = 35
-NOTE_D1 = 37
-NOTE_DS1 = 39
-NOTE_E1 = 41
-NOTE_F1 = 44
-NOTE_FS1 = 46
-NOTE_G1 = 49
-NOTE_GS1 = 52
-NOTE_A1 = 55
-NOTE_AS1 = 58
-NOTE_B1 = 62
-NOTE_C2 = 65
-NOTE_CS2 = 69
-NOTE_D2 = 73
-NOTE_DS2 = 78
-NOTE_E2 = 82
-NOTE_F2 = 87
-NOTE_FS2 = 93
-NOTE_G2 = 98
-NOTE_GS2 = 104
-NOTE_A2 = 110
-NOTE_AS2 = 117
-NOTE_B2 = 123
-NOTE_C3 = 131
-NOTE_CS3 = 139
-NOTE_D3 = 147
-NOTE_DS3 = 156
-NOTE_E3 = 165
-NOTE_F3 = 175
-NOTE_FS3 = 185
-NOTE_G3 = 196
-NOTE_GS3 = 208
-NOTE_A3 = 220
-NOTE_AS3 = 233
-NOTE_B3 = 247
-NOTE_C4 = 262
-NOTE_CS4 = 277
-NOTE_D4 = 294
-NOTE_DS4 = 311
-NOTE_E4 = 330
-NOTE_F4 = 349
-NOTE_FS4 = 370
-NOTE_G4 = 392
-NOTE_GS4 = 415
-NOTE_A4 = 440
-NOTE_AS4 = 466
-NOTE_B4 = 494
-NOTE_C5 = 523
-NOTE_CS5 = 554
-NOTE_D5 = 587
-NOTE_DS5 = 622
-NOTE_E5 = 659
-NOTE_F5 = 698
-NOTE_FS5 = 740
-NOTE_G5 = 784
-NOTE_GS5 = 831
-NOTE_A5 = 880
-NOTE_AS5 = 932
-NOTE_B5 = 988
-NOTE_C6 = 1047
-NOTE_CS6 = 1109
-NOTE_D6 = 1175
-NOTE_DS6 = 1245
-NOTE_E6 = 1319
-NOTE_F6 = 1397
-NOTE_FS6 = 1480
-NOTE_G6 = 1568
-NOTE_GS6 = 1661
-NOTE_A6 = 1760
-NOTE_AS6 = 1865
-NOTE_B6 = 1976
-NOTE_C7 = 2093
-NOTE_CS7 = 2217
-NOTE_D7 = 2349
-NOTE_DS7 = 2489
-NOTE_E7 = 2637
-NOTE_F7 = 2794
-NOTE_FS7 = 2960
-NOTE_G7 = 3136
-NOTE_GS7 = 3322
-NOTE_A7 = 3520
-NOTE_AS7 = 3729
-NOTE_B7 = 3951
-NOTE_C8 = 4186
-NOTE_CS8 = 4435
-NOTE_D8 = 4699
-NOTE_DS8 = 4978
+import http
+import machine
+import struct
 
-RATE = 22050
-BITS = 16
-VOLUME_REDUCTION_FACTOR = 4
-BASE_DURATION = 2
+SCK_PIN_OUT = machine.Pin(14)  # audio out BCLK
+WS_PIN_OUT = machine.Pin(13)  # audio out LRC
+SD_PIN_OUT = machine.Pin(27)  # audio out Din
+BUFFER_SIZE = 20000
 
 
-def tone_to_samples(frequency):
-    import math
-    import struct
-
-    # create a buffer containing the pure tone samples
-    samples_per_cycle = RATE // frequency
-    sample_size_in_bytes = BITS // 8
-    samples = bytearray(samples_per_cycle * sample_size_in_bytes)
-    range_ = pow(2, BITS) // 2 // VOLUME_REDUCTION_FACTOR
-
-    for i in range(samples_per_cycle):
-        sample = range_ + int(
-            (range_ - 1) * math.sin(2 * math.pi * i / samples_per_cycle)
-        )
-        struct.pack_into("<h", samples, i * sample_size_in_bytes, sample)
-
-    return samples
-
-
-def play_note(write_audio, note, duration):
-    samples = tone_to_samples(note)
-    repeats = BASE_DURATION * RATE // (duration * len(samples))
-    for i in range(repeats):
-        write_audio(samples)
-
-
-def pause(write_audio, duration):
-    samples = bytearray(1024)
-    repeats = BASE_DURATION * RATE // (duration * len(samples))
-    for i in range(repeats):
-        write_audio(samples)
+def _parse_wav_file(infile):
+    magic = infile.read(4)
+    if magic != b"RIFF":
+        raise RuntimeError("not RIFF file")
+    infile.read(4)  # ignore file size
+    type_ = infile.read(4)
+    if type_ != b"WAVE":
+        raise RuntimeError("not WAVE file")
+    tag = infile.read(4)
+    if tag != b"fmt ":
+        raise RuntimeError("missing format chunk")
+    (fmt_size,) = struct.unpack_from("<L", infile.read(4))
+    if fmt_size != 16:
+        raise RuntimeError(f"unexpected format chunk size: {fmt_size}")
+    fmt_type, n_channels, sample_rate, _, _, bits_per_sample = struct.unpack_from(
+        "<HHLLHH", infile.read(16)
+    )
+    if fmt_type != 1:
+        raise RuntimeError(f"unexpected format type: {fmt_type}")
+    while True:
+        tag = infile.read(4)
+        if not tag:
+            raise RuntimeError("missing data chunk")
+        if tag == b"data":
+            break
+        (chunk_size,) = struct.unpack_from("<L", infile.read(4))
+        infile.read(chunk_size)
+    (data_size,) = struct.unpack_from("<L", infile.read(4))
+    return n_channels, sample_rate, bits_per_sample, data_size
 
 
-def play_song(write_audio):
-    play_note(write_audio, NOTE_B4, 4)
-    play_note(write_audio, NOTE_A4, 8)
-    play_note(write_audio, NOTE_G4, 8)
-    play_note(write_audio, NOTE_G4, 2)
+def _prepare_i2s_bus(n_channels, sample_rate, bits_per_sample):
+    return machine.I2S(
+        1,
+        sck=SCK_PIN_OUT,
+        ws=WS_PIN_OUT,
+        sd=SD_PIN_OUT,
+        mode=machine.I2S.TX,
+        bits=bits_per_sample,
+        format=machine.I2S.MONO if n_channels == 1 else machine.I2S.STEREO,
+        rate=sample_rate,
+        ibuf=BUFFER_SIZE,
+    )
 
-    play_note(write_audio, NOTE_B4, 4)
-    play_note(write_audio, NOTE_A4, 8)
-    play_note(write_audio, NOTE_G4, 8)
-    play_note(write_audio, NOTE_G4, 4)
-    pause(write_audio, 8)
-    play_note(write_audio, NOTE_G4, 8)
 
-    play_note(write_audio, NOTE_E4, 4)
-    play_note(write_audio, NOTE_G4, 4)
-    play_note(write_audio, NOTE_G4, 4)
-    play_note(write_audio, NOTE_E4, 4)
-
-    play_note(write_audio, NOTE_B4, 4)
-    play_note(write_audio, NOTE_A4, 4)
-    pause(write_audio, 4)
-    pause(write_audio, 8)
-    play_note(write_audio, NOTE_G4, 8)
-
-    play_note(write_audio, NOTE_B4, 4)
-    play_note(write_audio, NOTE_B4, 4)
-    play_note(write_audio, NOTE_G4, 4)
-    play_note(write_audio, NOTE_E4, 4)
-
-    play_note(write_audio, NOTE_G4, 4)
-    play_note(write_audio, NOTE_E4, 4)
-    pause(write_audio, 4)
-    pause(write_audio, 8)
-    play_note(write_audio, NOTE_E4, 8)
-
-    play_note(write_audio, NOTE_G4, 4)
-    play_note(write_audio, NOTE_E4, 4)
-    play_note(write_audio, NOTE_G4, 4)
-    play_note(write_audio, NOTE_E4, 4)
-
-    play_note(write_audio, NOTE_A4, 2)
-    pause(write_audio, 2)
-
-    play_note(write_audio, NOTE_B4, 4)
-    play_note(write_audio, NOTE_B4, 4)
-    play_note(write_audio, NOTE_G4, 4)
-    play_note(write_audio, NOTE_E4, 4)
-
-    play_note(write_audio, NOTE_G4, 4)
-    play_note(write_audio, NOTE_G4, 4)
-    play_note(write_audio, NOTE_G4, 4)
-    play_note(write_audio, NOTE_G4, 8)
-    pause(write_audio, 8)
-
-    play_note(write_audio, NOTE_E4, 4)
-    play_note(write_audio, NOTE_G4, 4)
-    play_note(write_audio, NOTE_G4, 4)
-    play_note(write_audio, NOTE_E4, 4)
-
-    play_note(write_audio, NOTE_A4, 2)
-    pause(write_audio, 2)
+def play(url):
+    infile = http.open_get_request(url)
+    audio_out = None
+    try:
+        n_channels, sample_rate, bits_per_sample, data_size = _parse_wav_file(infile)
+        audio_out = _prepare_i2s_bus(n_channels, sample_rate, bits_per_sample)
+        samples = bytearray(BUFFER_SIZE)
+        while data_size > 0:
+            n_read = infile.readinto(samples, min(BUFFER_SIZE, data_size))
+            data_size -= n_read
+            if n_read == 0:
+                break
+            audio_out.write(samples)
+    except Exception as e:
+        print(f"error playing tone: {e}")
+    finally:
+        if audio_out:
+            audio_out.deinit()
+        infile.close()
