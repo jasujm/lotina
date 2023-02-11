@@ -16,7 +16,7 @@ def load_and_prepare_recordings():
         {
             "is_tap": row.label.startswith("tap"),
             **{
-                f"samples_bin_{n}": sample
+                f"features_{n}": sample
                 for (n, sample) in enumerate(extract_features_from_data(row.data))
             },
         }
@@ -51,8 +51,9 @@ def train_model(features, labels, *, epochs=2000, validation_split=0.2):
     model = keras.Sequential(
         [
             normalizer,
+            keras.layers.Dense(60, activation="relu"),
             keras.layers.Dense(40, activation="relu"),
-            keras.layers.Dense(20, activation="relu"),
+            keras.layers.Dropout(0.2),
             keras.layers.Dense(1, activation="sigmoid"),
         ]
     )
