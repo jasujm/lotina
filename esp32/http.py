@@ -1,5 +1,7 @@
-# A minimal HTTP implementation since the latest stable
-# Only supports HTTP since I use local network. Please don't hack.
+# A minimal HTTP implementation. It exists since the latest stable micropython
+# urequests doesn't support iterating responses, and ESP32 can't read large
+# files to buffer at once. Only supports HTTP since I use local network. Please
+# don't hack.
 
 import re
 import socket
@@ -21,8 +23,10 @@ def _parse_host(host):
     return hostname, port
 
 
-def _initiate_get_request(sock, host, path):
-    sock.sendall(f"GET {path} HTTP/1.0\r\nHost: {host}\r\n\r\n".encode())
+def _initiate_get_request(sock, host, path, accept):
+    sock.sendall(
+        f"GET {path} HTTP/1.0\r\nHost: {host}\r\nUser-Agent: lotina/0.1\r\nAccept: {'; '.join(accept or ['*/*'])}\r\n\r\n".encode()
+    )
     status = sock.readline()
     parts = status.split(b" ")
     if parts[1] != b"200":
@@ -33,21 +37,24 @@ def _initiate_get_request(sock, host, path):
             break
         parts = line.split(b":", 1)
         header = parts[0].lower()
-        value = parts[1]
-        if header == b"content-encoding":
+        value = parts[1].strip()
+        if header == b"content-type":
+            if accept and value.decode() not in accept:
+                raise RuntimeError(f"unsupported content type: {value}")
+        elif header == b"content-encoding":
             raise RuntimeError(f"content encoding not supported, got: {value}")
         elif header == b"transfer-encoding":
             raise RuntimeError(f"transfer encoding not supported, got: {value}")
 
 
-def open_get_request(url):
+def open_get_request(url, *, accept=None):
     host, path = _parse_url(url)
     hostname, port = _parse_host(host)
     addrinfo = socket.getaddrinfo(hostname, port)[0]
     sock = socket.socket()
     try:
         sock.connect(addrinfo[-1])
-        _initiate_get_request(sock, host, path)
+        _initiate_get_request(sock, host, path, accept)
     except:
         sock.close()
         raise

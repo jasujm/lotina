@@ -7,6 +7,8 @@ WS_PIN_OUT = machine.Pin(13)  # audio out LRC
 SD_PIN_OUT = machine.Pin(27)  # audio out Din
 BUFFER_SIZE = 20000
 
+CONTENT_TYPES = ["audio/wav", "audio/x-wav"]
+
 
 def _parse_wav_file(infile):
     magic = infile.read(4)
@@ -54,7 +56,7 @@ def _prepare_i2s_bus(n_channels, sample_rate, bits_per_sample):
 
 
 def play(url):
-    infile = http.open_get_request(url)
+    infile = http.open_get_request(url, accept=CONTENT_TYPES)
     audio_out = None
     try:
         n_channels, sample_rate, bits_per_sample, data_size = _parse_wav_file(infile)
