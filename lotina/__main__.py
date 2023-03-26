@@ -7,19 +7,28 @@ def cli():
     """The machine learning powered musical soap dispenser"""
 
 
-try:
-    from .processor import process
-except:
-    logging.info("Could not load process command", exc_info=True)
-else:
-    cli.add_command(process)
+@cli.command()
+@click.option("--evaluate/--no-evaluate", default=True, help="Evaluate model")
+@click.option("--save/--no-save", default=False, help="Save model")
+def train(evaluate, save):
+    """Train model from audio samples"""
 
-try:
     from .modeltraining import train
-except:
-    logging.info("Could not load train command", exc_info=True)
-else:
-    cli.add_command(train)
+
+    train(evaluate, save)
+
+
+@cli.command()
+@click.option("--label")
+@click.option("--classify/--no-classify", default=False)
+@click.option("--prediction", type=int)
+def process(label, classify, prediction):
+    """MQTT message processor"""
+
+    from .processor import process
+
+    process(label, classify, prediction)
+
 
 if __name__ == "__main__":
     cli()

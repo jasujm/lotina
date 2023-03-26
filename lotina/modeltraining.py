@@ -1,4 +1,6 @@
+from collections import defaultdict
 import random
+import functools
 
 import click
 import matplotlib.pyplot as plt
@@ -6,54 +8,56 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import sqlalchemy as sa
+import scipy.signal
+import tensorflow.keras as keras
+from tensorflow.keras.utils import timeseries_dataset_from_array
+from tensorflow.data import Dataset
+from tensorflow import reshape
 
 from . import db
-from .model import extract_features_from_data
+from .model import get_input_shape, to_features
 
 
-def load_and_prepare_recordings():
-    rows = [
-        {
-            "is_tap": row.label.startswith("tap"),
-            **{
-                f"features_{n}": sample
-                for (n, sample) in enumerate(extract_features_from_data(row.data))
-            },
-        }
-        for row in db.engine.execute(sa.select([db.samples.c.label, db.samples.c.data]))
-    ]
+SEQUENCE_LENGTH = 10
+SEQUENCE_STRIDE = SEQUENCE_LENGTH // 2
+
+
+def load_dataset_for_training():
+    datasets = []
+    rows = list(db.engine.execute(sa.select([db.samples.c.label, db.samples.c.data])))
     random.shuffle(rows)
-    return pd.DataFrame(rows)
+    for label, data in rows:
+        features = timeseries_dataset_from_array(
+            to_features(data),
+            None,
+            SEQUENCE_LENGTH,
+            sequence_stride=SEQUENCE_STRIDE,
+            batch_size=None,
+        )
+        labels = Dataset.from_tensors([label.startswith("tap")]).repeat()
+        datasets.append(Dataset.zip((features, labels)))
+    return (
+        functools.reduce(lambda x, y: x.concatenate(y), datasets)
+        .shuffle(1000)
+        .batch(64)
+    )
 
 
-def split_dataset_to_features_and_labels(dataset):
-    features = dataset.copy()
-    labels = features["is_tap"]
-    features.drop("is_tap", axis=1, inplace=True)
-    return features, labels
+def split_dataset(dataset, *, split=0.2):
+    N = int(int(dataset.cardinality()) * split)
+    return dataset.take(N), dataset.skip(N)
 
 
-def get_train_and_test_sets(dataset):
-    train_dataset = dataset.sample(frac=0.9)
-    test_dataset = dataset.drop(train_dataset.index)
-    return [
-        *split_dataset_to_features_and_labels(train_dataset),
-        *split_dataset_to_features_and_labels(test_dataset),
-    ]
-
-
-def train_model(features, labels, *, epochs=2000, validation_split=0.2):
-    import tensorflow.keras as keras
-
-    normalizer = keras.layers.Normalization()
-    normalizer.adapt(np.array(features))
+def train_model(dataset, *, epochs, validation_split=0.2):
+    validate_dataset, train_dataset = split_dataset(dataset, split=validation_split)
 
     model = keras.Sequential(
         [
-            normalizer,
-            keras.layers.Dense(60, activation="relu"),
-            keras.layers.Dense(40, activation="relu"),
-            keras.layers.Dropout(0.2),
+            keras.layers.Input(get_input_shape()),
+            keras.layers.BatchNormalization(),
+            keras.layers.Conv1D(32, (3,), activation="relu"),
+            keras.layers.MaxPooling1D(),
+            keras.layers.Dense(16, activation="relu"),
             keras.layers.Dense(1, activation="sigmoid"),
         ]
     )
@@ -61,12 +65,13 @@ def train_model(features, labels, *, epochs=2000, validation_split=0.2):
         loss="binary_crossentropy", optimizer="adam", metrics=["binary_accuracy"]
     )
     history = model.fit(
-        features,
-        labels,
+        train_dataset,
         epochs=epochs,
-        validation_split=validation_split,
+        validation_data=validate_dataset,
     )
+
     model.summary()
+
     return model, history
 
 
@@ -80,36 +85,16 @@ def plot_loss(history):
     plt.show()
 
 
-@click.command()
-@click.option("--evaluate/--no-evaluate", default=True, help="Evaluate model")
-@click.option("--save/--no-save", default=False, help="Save model")
 def train(evaluate, save):
     """Train model from audio samples"""
-    dataset = load_and_prepare_recordings()
+    dataset = load_dataset_for_training()
     if evaluate:
-        (
-            train_features,
-            train_labels,
-            test_features,
-            test_labels,
-        ) = get_train_and_test_sets(dataset)
-        model, history = train_model(train_features, train_labels)
+        test_dataset, train_dataset = split_dataset(dataset)
+        model, history = train_model(train_dataset, epochs=200)
         plot_loss(history)
-        test_results = model.evaluate(test_features, test_labels)
+        test_results = model.evaluate(test_dataset, return_dict=True)
         click.echo(f"Error on test set: {test_results}")
-        predictions = model.predict(test_features).flatten()
-        prediction_comparison = pd.DataFrame(
-            {
-                "prediction_raw": predictions,
-                "prediction": predictions > 0.5,
-                "actual": test_labels.to_numpy().flatten(),
-            }
-        )
-        click.echo(prediction_comparison.to_string())
 
     if save:
-        all_features, all_labels = split_dataset_to_features_and_labels(dataset)
-        model, _ = train_model(
-            all_features, all_labels, epochs=5000, validation_split=0.0
-        )
+        model, _ = train_model(dataset, epochs=1000, validation_split=0.0)
         model.save("lotina.tf")

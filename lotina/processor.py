@@ -6,9 +6,10 @@ from dotenv import load_dotenv
 import numpy as np
 import paho.mqtt.client as mqtt
 
-from .model import extract_features_from_data
+from .model import to_features
 
 TOPIC_SUB = "lotina/+/samples"
+N_SAMPLES_FOR_PREDICTION = 3
 
 load_dotenv()
 
@@ -19,18 +20,17 @@ def load_model():
     return keras.models.load_model("lotina.tf")
 
 
-def save_sample(label, data):
-    from sqlalchemy import insert
-    from . import db
-
-    db.engine.execute(insert(db.samples).values(label=label, data=data))
-
-
 class Processor:
     def __init__(self, label, classify, prediction):
         self._label = label
         self._model = load_model() if classify else None
         self._prediction = prediction
+        self._data = bytearray()
+        self._samples = []
+
+    def init_mqtt_client(self, client):
+        client.on_connect = self.on_connect
+        client.on_message = self.on_message
 
     def on_connect(self, client, userdata, flags, rc):
         click.echo(f"Connected with result code: {rc}")
@@ -38,30 +38,50 @@ class Processor:
 
     def on_message(self, client, userdata, msg):
         if self._label:
-            save_sample(self._label, msg.payload)
+            self._data += msg.payload
         prediction = self._prediction
-        if self._model:
-            samples = np.array(extract_features_from_data(msg.payload))
-            prediction = self._model(samples)[0][0]
-            prediction = int(255 * prediction)
+        if not msg.payload:
+            self._samples.clear()
+        elif self._model:
+            self._samples.append(to_features(msg.payload))
+            if len(self._samples) >= N_SAMPLES_FOR_PREDICTION:
+                prediction = self._make_prediction()
+                self._samples.pop(0)
         if prediction is not None:
             prediction_topic = msg.topic.replace("/samples", "/prediction")
             client.publish(prediction_topic, prediction.to_bytes(1, "little"))
 
+    def save_sample(self):
+        if self._label:
+            from sqlalchemy import insert
+            from . import db
 
-@click.command()
-@click.option("--label")
-@click.option("--classify/--no-classify", default=False)
-@click.option("--prediction", type=int)
+            click.echo(
+                f"Saving sample, label {self._label}, sample size {len(self._data)}"
+            )
+            db.engine.execute(
+                insert(db.samples).values(label=self._label, data=self._data)
+            )
+
+    def _make_prediction(self):
+        from tensorflow.math import reduce_mean
+
+        prediction = self._model(np.stack(self._samples))
+        prediction_mean = reduce_mean(prediction)
+        return int(255 * float(prediction_mean))
+
+
 def process(label, classify, prediction):
     """MQTT message processor"""
     recorder = Processor(label, classify, prediction)
 
     client = mqtt.Client()
-    client.on_connect = recorder.on_connect
-    client.on_message = recorder.on_message
+    recorder.init_mqtt_client(client)
 
     client.username_pw_set(os.getenv("MQTT_USER"), os.getenv("MQTT_PASSWD"))
     client.connect(os.getenv("MQTT_BROKER"))
 
-    client.loop_forever()
+    try:
+        client.loop_forever()
+    except KeyboardInterrupt:
+        recorder.save_sample()

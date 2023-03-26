@@ -17,14 +17,10 @@ SD_PIN_IN = machine.Pin(33)  # audio in Dout
 
 AUDIO_SAMPLE_RATE = 22050
 AUDIO_SAMPLE_BITS = 16
-AUDIO_SAMPLE_BUFFER_LENGTH = 8192
+AUDIO_SAMPLE_BUFFER_LENGTH = 16384
 
-TICK_MS = 500
-
-N_PREDICTIONS = 4
 DETECTION_THRESHOLD = 127
-N_POSITIVES_TO_DETECT = 3
-HAND_WASHING_DETECTED_TIMEOUT_S = 2
+HAND_WASHING_DETECTED_TIMEOUT_S = 3
 HAND_WASHING_OVER_TIMEOUT_S = 20
 
 
@@ -49,9 +45,10 @@ def init_wifi(ssid, passwd):
 
 
 class LotinaEngine:
-    def __init__(self, song_url):
+    def __init__(self, song_url, publisher):
+        self._publisher = publisher
         self._song_url = song_url
-        self._predictions = []
+        self._prediction = 0
         self._timestamp = time.time()
         self._transit_to_idle()
 
@@ -63,6 +60,7 @@ class LotinaEngine:
     def _transit_to_soap(self):
         print("soap time...")
         self._state = STATE_SOAP
+        self._publisher.publish_interrupt()
         notes.play(self._song_url)
 
     def _transit_to_hand_washing_over(self):
@@ -76,36 +74,52 @@ class LotinaEngine:
 
     def handle_tick(self):
         if self._state == STATE_IDLE:
-            if (
-                sum(
-                    prediction > DETECTION_THRESHOLD for prediction in self._predictions
-                )
-                >= N_POSITIVES_TO_DETECT
-            ):
+            if self._prediction > DETECTION_THRESHOLD:
                 self._transit_to_hand_washing_detected()
         elif self._state == STATE_HAND_WASHING_DETECTED:
             if time.time() - self._timestamp >= HAND_WASHING_DETECTED_TIMEOUT_S:
                 self._transit_to_soap()
         elif self._state == STATE_SOAP:
-            if (
-                sum(
-                    prediction > DETECTION_THRESHOLD for prediction in self._predictions
-                )
-                < N_POSITIVES_TO_DETECT
-            ):
+            if self._prediction < DETECTION_THRESHOLD:
                 self._transit_to_hand_washing_over()
         elif self._state == STATE_HAND_WASHING_OVER:
             if time.time() - self._timestamp >= HAND_WASHING_OVER_TIMEOUT_S:
                 self._transit_to_idle()
 
     def handle_msg(self, topic, msg):
-        prediction = int.from_bytes(msg, "little")
-        self._predictions.append(prediction)
-        if len(self._predictions) > N_PREDICTIONS:
-            self._predictions.pop(0)
+        self._prediction = int.from_bytes(msg, "little")
 
 
-def process_messages(identity, mqtt_broker, mqtt_user, mqtt_passwd, song_url):
+class SamplePublisher:
+    def __init__(self, topic, client, sample_publish_threshold):
+        self._topic = topic
+        self._client = client
+        self._sample_publish_threshold = sample_publish_threshold
+        self._audio_above_threshold_detected = True
+
+    def publish_interrupt(self):
+        if self._audio_above_threshold_detected:
+            self._client.publish(self._topic, b"")
+        self._audio_above_threshold_detected = False
+
+    def publish_samples(self, samples):
+        _min = _max = int.from_bytes(samples[:2], "little")
+        for i in range(2, len(samples), 2):
+            sample = int.from_bytes(samples[i : i + 2], "little")
+            if sample < _min:
+                _min = sample
+            elif sample > _max:
+                _max = sample
+            if _max - _min > self._sample_publish_threshold:
+                self._audio_above_threshold_detected = True
+                self._client.publish(self._topic, samples)
+                return
+        self.publish_interrupt()
+
+
+def process_messages(
+    identity, mqtt_broker, mqtt_user, mqtt_passwd, song_url, sample_publish_threshold
+):
     from umqtt.simple import MQTTClient
     import time
     import ubinascii
@@ -123,21 +137,27 @@ def process_messages(identity, mqtt_broker, mqtt_user, mqtt_passwd, song_url):
     )
     samples = bytearray(AUDIO_SAMPLE_BUFFER_LENGTH)
 
-    engine = LotinaEngine(song_url)
-
     client_id = ubinascii.hexlify(machine.unique_id())
     client = MQTTClient(client_id, mqtt_broker, user=mqtt_user, password=mqtt_passwd)
+
+    publisher = SamplePublisher(
+        f"lotina/{identity}/samples".encode(), client, sample_publish_threshold
+    )
+
+    engine = LotinaEngine(song_url, publisher)
     client.set_callback(engine.handle_msg)
+
     client.connect()
     client.subscribe(f"lotina/{identity}/prediction".encode())
-    topic_samples = f"lotina/{identity}/samples".encode()
 
     while True:
         audio_in.readinto(samples)
-        client.publish(topic_samples, samples)
-        time.sleep_ms(TICK_MS)
+        publisher.publish_samples(samples)
         client.check_msg()
-        engine.handle_tick()
+        # Marking sample_publish_threshold < 0 means we just want to record
+        # Do not run the state machine then
+        if sample_publish_threshold >= 0:
+            engine.handle_tick()
 
 
 def main():
@@ -151,6 +171,7 @@ def main():
         mqtt_user=config["mqtt_user"],
         mqtt_passwd=config["mqtt_passwd"],
         song_url=config["song_url"],
+        sample_publish_threshold=config["sample_publish_threshold"],
     )
 
 

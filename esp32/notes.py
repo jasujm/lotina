@@ -5,7 +5,7 @@ import struct
 SCK_PIN_OUT = machine.Pin(14)  # audio out BCLK
 WS_PIN_OUT = machine.Pin(13)  # audio out LRC
 SD_PIN_OUT = machine.Pin(27)  # audio out Din
-BUFFER_SIZE = 20000
+BUFFER_SIZE = 16384
 
 CONTENT_TYPES = ["audio/wav", "audio/x-wav"]
 
