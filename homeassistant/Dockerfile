@@ -1,5 +1,4 @@
-ARG BUILD_FROM
-FROM $BUILD_FROM
+FROM homeassistant/aarch64-base-debian
 
 RUN apt-get update && apt-get install -y python3-pip python3-wheel
 

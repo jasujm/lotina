@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "lotina"
-version = "0.1.0"
+version = "0.2"
 description = "Machine learning powered musical soap box"
 authors = ["Jaakko Moisio <jaakko@moisio.fi>"]
 

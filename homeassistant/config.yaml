@@ -1,6 +1,6 @@
 name: "Lotina"
 description: "The machine learning powered musical soap dispenser"
-version: "0.1"
+version: "0.2"
 slug: "lotina"
 init: false
 arch:
