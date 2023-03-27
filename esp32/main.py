@@ -138,7 +138,9 @@ def process_messages(
     samples = bytearray(AUDIO_SAMPLE_BUFFER_LENGTH)
 
     client_id = ubinascii.hexlify(machine.unique_id())
-    client = MQTTClient(client_id, mqtt_broker, user=mqtt_user, password=mqtt_passwd)
+    client = MQTTClient(
+        client_id, mqtt_broker, user=mqtt_user, password=mqtt_passwd, keepalive=60
+    )
 
     publisher = SamplePublisher(
         f"lotina/{identity}/samples".encode(), client, sample_publish_threshold
