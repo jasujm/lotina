@@ -107,13 +107,17 @@ class SamplePublisher:
         self._client = client
         self._sample_publish_threshold = sample_publish_threshold
         self._audio_above_threshold_detected = True
-        self._last_availability_timestamp = -MQTT_KEEPALIVE
-        client.set_last_will(self._availability_topic, STATE_OFFLINE, retain=True)
+        self._last_availability_timestamp = 0
 
-    def publish_availability(self):
+    def connect(self):
+        self._client.set_last_will(self._availability_topic, STATE_OFFLINE, retain=True)
+        self._client.connect()
+        self._client.publish(self._availability_topic, STATE_ONLINE, retain=True)
+
+    def keepalive(self):
         t = time.time()
         if t - self._last_availability_timestamp >= MQTT_AVAILABILITY_INTERVAL:
-            self._client.publish(self._availability_topic, STATE_ONLINE, retain=True)
+            self._client.ping()
             self._last_availability_timestamp = t
 
     def publish_state(self, state):
@@ -173,13 +177,13 @@ def process_messages(
 
     engine = LotinaEngine(song_url, publisher)
     client.set_callback(engine.handle_msg)
-    client.connect()
+
+    publisher.connect()
+    publisher.publish_state(STATE_OFF)
     client.subscribe(f"{topic_prefix}/prediction".encode())
 
-    publisher.publish_state(STATE_OFF)
-
     while True:
-        publisher.publish_availability()
+        publisher.keepalive()
         audio_in.readinto(samples)
         publisher.publish_samples(samples)
         client.check_msg()
