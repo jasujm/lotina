@@ -49,7 +49,7 @@ class Processor:
                 self._samples.pop(0)
         if prediction is not None:
             prediction_topic = msg.topic.replace("/samples", "/prediction")
-            client.publish(prediction_topic, prediction.to_bytes(1, "little"))
+            client.publish(prediction_topic, prediction)
 
     def save_sample(self):
         if self._label:

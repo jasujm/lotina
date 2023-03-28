@@ -15,6 +15,13 @@ SCK_PIN_IN = machine.Pin(32)  # audio in BCLK
 WS_PIN_IN = machine.Pin(25)  # audio in LRC
 SD_PIN_IN = machine.Pin(33)  # audio in Dout
 
+MQTT_KEEPALIVE = 120
+MQTT_AVAILABILITY_INTERVAL = 60
+STATE_ON = b"ON"
+STATE_OFF = b"OFF"
+STATE_ONLINE = b"online"
+STATE_OFFLINE = b"offline"
+
 AUDIO_SAMPLE_RATE = 22050
 AUDIO_SAMPLE_BITS = 16
 AUDIO_SAMPLE_BUFFER_LENGTH = 16384
@@ -56,6 +63,7 @@ class LotinaEngine:
         print("hand washing detected...")
         self._state = STATE_HAND_WASHING_DETECTED
         self._timestamp = time.time()
+        self._publisher.publish_state(STATE_ON)
 
     def _transit_to_soap(self):
         print("soap time...")
@@ -67,6 +75,7 @@ class LotinaEngine:
         print("hand washing over...")
         self._state = STATE_HAND_WASHING_OVER
         self._timestamp = time.time()
+        self._publisher.publish_state(STATE_OFF)
 
     def _transit_to_idle(self):
         print("waiting for hand washing...")
@@ -87,19 +96,32 @@ class LotinaEngine:
                 self._transit_to_idle()
 
     def handle_msg(self, topic, msg):
-        self._prediction = int.from_bytes(msg, "little")
+        self._prediction = int(msg)
 
 
 class SamplePublisher:
-    def __init__(self, topic, client, sample_publish_threshold):
-        self._topic = topic
+    def __init__(self, topic_prefix, client, sample_publish_threshold):
+        self._samples_topic = f"{topic_prefix}/samples".encode()
+        self._state_topic = f"{topic_prefix}/state".encode()
+        self._availability_topic = f"{topic_prefix}/availability".encode()
         self._client = client
         self._sample_publish_threshold = sample_publish_threshold
         self._audio_above_threshold_detected = True
+        self._last_availability_timestamp = -MQTT_KEEPALIVE
+        client.set_last_will(self._availability_topic, STATE_OFFLINE, retain=True)
+
+    def publish_availability(self):
+        t = time.time()
+        if t - self._last_availability_timestamp >= MQTT_AVAILABILITY_INTERVAL:
+            self._client.publish(self._availability_topic, STATE_ONLINE, retain=True)
+            self._last_availability_timestamp = t
+
+    def publish_state(self, state):
+        self._client.publish(self._state_topic, state, retain=True)
 
     def publish_interrupt(self):
         if self._audio_above_threshold_detected:
-            self._client.publish(self._topic, b"")
+            self._client.publish(self._samples_topic, b"")
         self._audio_above_threshold_detected = False
 
     def publish_samples(self, samples):
@@ -112,7 +134,7 @@ class SamplePublisher:
                 _max = sample
             if _max - _min > self._sample_publish_threshold:
                 self._audio_above_threshold_detected = True
-                self._client.publish(self._topic, samples)
+                self._client.publish(self._samples_topic, samples)
                 return
         self.publish_interrupt()
 
@@ -139,20 +161,25 @@ def process_messages(
 
     client_id = ubinascii.hexlify(machine.unique_id())
     client = MQTTClient(
-        client_id, mqtt_broker, user=mqtt_user, password=mqtt_passwd, keepalive=60
+        client_id,
+        mqtt_broker,
+        user=mqtt_user,
+        password=mqtt_passwd,
+        keepalive=MQTT_KEEPALIVE,
     )
 
-    publisher = SamplePublisher(
-        f"lotina/{identity}/samples".encode(), client, sample_publish_threshold
-    )
+    topic_prefix = f"lotina/{identity}"
+    publisher = SamplePublisher(topic_prefix, client, sample_publish_threshold)
 
     engine = LotinaEngine(song_url, publisher)
     client.set_callback(engine.handle_msg)
-
     client.connect()
-    client.subscribe(f"lotina/{identity}/prediction".encode())
+    client.subscribe(f"{topic_prefix}/prediction".encode())
+
+    publisher.publish_state(STATE_OFF)
 
     while True:
+        publisher.publish_availability()
         audio_in.readinto(samples)
         publisher.publish_samples(samples)
         client.check_msg()
