@@ -21,10 +21,9 @@ def load_model():
 
 
 class Processor:
-    def __init__(self, label, classify, prediction):
+    def __init__(self, label, classify):
         self._label = label
         self._model = load_model() if classify else None
-        self._prediction = prediction
         self._data = bytearray()
         self._samples = []
 
@@ -39,7 +38,7 @@ class Processor:
     def on_message(self, client, userdata, msg):
         if self._label:
             self._data += msg.payload
-        prediction = self._prediction
+        prediction = None
         if not msg.payload:
             self._samples.clear()
         elif self._model:
@@ -71,9 +70,9 @@ class Processor:
         return int(255 * float(prediction_mean))
 
 
-def process(label, classify, prediction):
+def process(label, classify):
     """MQTT message processor"""
-    recorder = Processor(label, classify, prediction)
+    recorder = Processor(label, classify)
 
     client = mqtt.Client()
     recorder.init_mqtt_client(client)

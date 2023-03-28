@@ -21,13 +21,12 @@ def train(evaluate, save):
 @cli.command()
 @click.option("--label")
 @click.option("--classify/--no-classify", default=False)
-@click.option("--prediction", type=int)
-def process(label, classify, prediction):
+def process(label, classify):
     """MQTT message processor"""
 
     from .processor import process
 
-    process(label, classify, prediction)
+    process(label, classify)
 
 
 if __name__ == "__main__":
