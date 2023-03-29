@@ -1,4 +1,5 @@
 import gc
+import json
 import machine
 import time
 
@@ -32,8 +33,6 @@ HAND_WASHING_OVER_TIMEOUT_S = 20
 
 
 def load_config():
-    import json
-
     with open("lotina.conf") as f:
         return json.load(f)
 
@@ -71,9 +70,10 @@ class LotinaEngine:
         self._transit_to_idle()
 
     def _transit_to(self, state):
-        print("state:", state)
-        self._state = state
-        self._publisher.publish_state(state)
+        if state != self._state:
+            print("state:", state.decode())
+            self._state = state
+            self._publisher.publish_state(state)
 
     def _transit_to_idle(self):
         self._transit_to(STATE_IDLE)
@@ -90,6 +90,9 @@ class LotinaEngine:
     def _transit_to_hand_washing_over(self):
         self._transit_to(STATE_COOLDOWN)
         self._timestamp = time.time()
+
+    def is_enabled(self):
+        return self._enabled
 
     def handle_tick(self):
         if not self._enabled:
@@ -119,12 +122,16 @@ class LotinaEngine:
             STATE_ON,
             STATE_OFF,
         ):
-            self._enabled = bool(msg == STATE_ON)
-            print("enabled:", self._enabled)
-            self._publisher.publish_enabled(msg.replace(b"/set_enabled", b"/enabled"))
-            if not self._enabled:
-                self._publisher.publish_interrupt()
-                self._transit_to_idle()
+            enabled = bool(msg == STATE_ON)
+            if enabled != self._enabled:
+                self._enabled = enabled
+                print("enabled:", self._enabled)
+                self._publisher.publish_enabled(
+                    msg.replace(b"/set_enabled", b"/enabled")
+                )
+                if not self._enabled:
+                    self._publisher.publish_interrupt()
+                    self._transit_to_idle()
 
 
 class SamplePublisher:
@@ -133,16 +140,19 @@ class SamplePublisher:
         self._samples_topic = f"{topic_prefix}/samples".encode()
         self._state_topic = f"{topic_prefix}/state".encode()
         self._availability_topic = f"{topic_prefix}/availability".encode()
-        self._enabled_topic = f"{topic_prefix}.enabled".encode()
+        self._enabled_topic = f"{topic_prefix}/enabled".encode()
+        self._set_enabled_topic = f"{topic_prefix}/set_enabled".encode()
         self._client = client
         self._sample_publish_threshold = sample_publish_threshold
         self._audio_above_threshold_detected = True
         self._last_availability_timestamp = 0
 
     def connect(self):
-        self._client.set_last_will(self._availability_topic, STATE_OFFLINE, retain=True)
+        self._client.set_last_will(
+            self._availability_topic, STATE_OFFLINE, retain=True, qos=1
+        )
         self._client.connect()
-        self._client.publish(self._availability_topic, STATE_ONLINE, retain=True)
+        self._client.publish(self._availability_topic, STATE_ONLINE, retain=True, qos=1)
 
     def keepalive(self):
         t = time.time()
@@ -151,10 +161,10 @@ class SamplePublisher:
             self._last_availability_timestamp = t
 
     def publish_state(self, state):
-        self._client.publish(self._state_topic, state, retain=True)
+        self._client.publish(self._state_topic, state, retain=True, qos=1)
 
     def publish_enabled(self, enabled):
-        self._client.publish(self._enabled_topic, enabled, retain=True)
+        self._client.publish(self._enabled_topic, enabled, retain=True, qos=1)
 
     def publish_interrupt(self):
         if self._audio_above_threshold_detected:
@@ -176,8 +186,29 @@ class SamplePublisher:
         self.publish_interrupt()
 
 
+def publish_discovery(client, discovery_prefix, component, object_id, suffix, **config):
+    client.publish(
+        f"{discovery_prefix}/{component}/{object_id}/config".encode(),
+        json.dumps(
+            dict(
+                unique_id=f"{object_id}-{suffix}",
+                **config,
+            )
+        ).encode(),
+        retain=True,
+        qos=1,
+    )
+
+
 def process_messages(
-    identity, mqtt_broker, mqtt_user, mqtt_passwd, song_url, sample_publish_threshold
+    identity,
+    device_name,
+    mqtt_broker,
+    mqtt_user,
+    mqtt_passwd,
+    song_url,
+    sample_publish_threshold,
+    discovery_prefix,
 ):
     from umqtt.simple import MQTTClient
     import time
@@ -211,14 +242,30 @@ def process_messages(
     engine = LotinaEngine(song_url, publisher)
     engine.start()
 
+    if discovery_prefix:
+        publish_discovery(
+            client,
+            discovery_prefix,
+            "switch",
+            f"lotina-{client_id.decode()}-enabled",
+            "enabled",
+            name=(device_name or "Lotina"),
+            state_topic=publisher._enabled_topic,
+            command_topic=publisher._set_enabled_topic,
+            availability_topic=publisher._availability_topic,
+            device={
+                "identifiers": [client_id],
+                "name": device_name,
+            },
+            icon="mdi:hand-wash",
+        )
+
     while True:
         publisher.keepalive()
-        audio_in.readinto(samples)
-        publisher.publish_samples(samples)
         client.check_msg()
-        # Marking sample_publish_threshold < 0 means we just want to record
-        # Do not run the state machine then
-        if sample_publish_threshold >= 0:
+        if engine.is_enabled():
+            audio_in.readinto(samples)
+            publisher.publish_samples(samples)
             engine.handle_tick()
 
 
@@ -233,7 +280,9 @@ def main():
         mqtt_user=config["mqtt_user"],
         mqtt_passwd=config["mqtt_passwd"],
         song_url=config["song_url"],
-        sample_publish_threshold=config["sample_publish_threshold"],
+        sample_publish_threshold=config.get("sample_publish_threshold", 0),
+        discovery_prefix=config.get("discovery_prefix"),
+        device_name=config.get("device_name"),
     )
 
 
