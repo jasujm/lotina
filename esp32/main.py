@@ -6,10 +6,10 @@ import notes
 
 gc.enable()
 
-STATE_IDLE = 0
-STATE_HAND_WASHING_DETECTED = 1
-STATE_SOAP = 2
-STATE_HAND_WASHING_OVER = 3
+STATE_IDLE = b"idle"
+STATE_WASHING = b"washing"
+STATE_SOAP = b"soap"
+STATE_COOLDOWN = b"cooldown"
 
 SCK_PIN_IN = machine.Pin(32)  # audio in BCLK
 WS_PIN_IN = machine.Pin(25)  # audio in LRC
@@ -56,54 +56,84 @@ class LotinaEngine:
         self._publisher = publisher
         self._song_url = song_url
         self._prediction = 0
+        self._enabled = True
         self._timestamp = time.time()
+        self._state = None
+
+    def start(self):
+        client = self._publisher._client
+        topic_prefix = self._publisher._topic_prefix
+        client.set_callback(self._handle_msg)
+        self._publisher.connect()
+        client.subscribe(f"{topic_prefix}/prediction".encode())
+        client.subscribe(f"{topic_prefix}/enabled".encode())
+        client.subscribe(f"{topic_prefix}/set_enabled".encode())
         self._transit_to_idle()
 
+    def _transit_to(self, state):
+        print("state:", state)
+        self._state = state
+        self._publisher.publish_state(state)
+
+    def _transit_to_idle(self):
+        self._transit_to(STATE_IDLE)
+
     def _transit_to_hand_washing_detected(self):
-        print("hand washing detected...")
-        self._state = STATE_HAND_WASHING_DETECTED
+        self._transit_to(STATE_WASHING)
         self._timestamp = time.time()
-        self._publisher.publish_state(STATE_ON)
 
     def _transit_to_soap(self):
-        print("soap time...")
-        self._state = STATE_SOAP
+        self._transit_to(STATE_SOAP)
         self._publisher.publish_interrupt()
         notes.play(self._song_url)
 
     def _transit_to_hand_washing_over(self):
-        print("hand washing over...")
-        self._state = STATE_HAND_WASHING_OVER
+        self._transit_to(STATE_COOLDOWN)
         self._timestamp = time.time()
-        self._publisher.publish_state(STATE_OFF)
-
-    def _transit_to_idle(self):
-        print("waiting for hand washing...")
-        self._state = STATE_IDLE
 
     def handle_tick(self):
+        if not self._enabled:
+            return
         if self._state == STATE_IDLE:
             if self._prediction > DETECTION_THRESHOLD:
                 self._transit_to_hand_washing_detected()
-        elif self._state == STATE_HAND_WASHING_DETECTED:
+        elif self._state == STATE_WASHING:
             if time.time() - self._timestamp >= HAND_WASHING_DETECTED_TIMEOUT_S:
                 self._transit_to_soap()
         elif self._state == STATE_SOAP:
             if self._prediction < DETECTION_THRESHOLD:
                 self._transit_to_hand_washing_over()
-        elif self._state == STATE_HAND_WASHING_OVER:
+        elif self._state == STATE_COOLDOWN:
             if time.time() - self._timestamp >= HAND_WASHING_OVER_TIMEOUT_S:
                 self._transit_to_idle()
 
-    def handle_msg(self, topic, msg):
-        self._prediction = int(msg)
+    def _handle_msg(self, topic, msg):
+        if topic.endswith(b"/prediction"):
+            try:
+                self._prediction = int(msg)
+            except ValueError:
+                pass
+        elif (
+            topic.endswith(b"/enabled") or topic.endswith(b"/set_enabled")
+        ) and msg in (
+            STATE_ON,
+            STATE_OFF,
+        ):
+            self._enabled = bool(msg == STATE_ON)
+            print("enabled:", self._enabled)
+            self._publisher.publish_enabled(msg.replace(b"/set_enabled", b"/enabled"))
+            if not self._enabled:
+                self._publisher.publish_interrupt()
+                self._transit_to_idle()
 
 
 class SamplePublisher:
     def __init__(self, topic_prefix, client, sample_publish_threshold):
+        self._topic_prefix = topic_prefix
         self._samples_topic = f"{topic_prefix}/samples".encode()
         self._state_topic = f"{topic_prefix}/state".encode()
         self._availability_topic = f"{topic_prefix}/availability".encode()
+        self._enabled_topic = f"{topic_prefix}.enabled".encode()
         self._client = client
         self._sample_publish_threshold = sample_publish_threshold
         self._audio_above_threshold_detected = True
@@ -122,6 +152,9 @@ class SamplePublisher:
 
     def publish_state(self, state):
         self._client.publish(self._state_topic, state, retain=True)
+
+    def publish_enabled(self, enabled):
+        self._client.publish(self._enabled_topic, enabled, retain=True)
 
     def publish_interrupt(self):
         if self._audio_above_threshold_detected:
@@ -176,11 +209,7 @@ def process_messages(
     publisher = SamplePublisher(topic_prefix, client, sample_publish_threshold)
 
     engine = LotinaEngine(song_url, publisher)
-    client.set_callback(engine.handle_msg)
-
-    publisher.connect()
-    publisher.publish_state(STATE_OFF)
-    client.subscribe(f"{topic_prefix}/prediction".encode())
+    engine.start()
 
     while True:
         publisher.keepalive()
