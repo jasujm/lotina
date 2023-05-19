@@ -29,5 +29,18 @@ def process(label, classify):
     process(label, classify)
 
 
+@cli.command()
+@click.argument("id")
+def play(id):
+    """Play sample
+
+    Play sample identified by ID.
+    """
+
+    from .play import play
+
+    play(id)
+
+
 if __name__ == "__main__":
     cli()

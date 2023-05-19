@@ -55,9 +55,14 @@ def train_model(dataset, *, epochs, validation_split=0.2):
         [
             keras.layers.Input(get_input_shape()),
             keras.layers.BatchNormalization(),
+            #            keras.layers.Conv1D(64, (3,), activation="relu"),
+            #            keras.layers.MaxPooling1D(),
+            #            keras.layers.Dropout(0.3),
             keras.layers.Conv1D(32, (3,), activation="relu"),
             keras.layers.MaxPooling1D(),
+            #            keras.layers.Dropout(0.3),
             keras.layers.Dense(16, activation="relu"),
+            #            keras.layers.Dense(8, activation="relu"),
             keras.layers.Dense(1, activation="sigmoid"),
         ]
     )
