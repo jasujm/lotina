@@ -52,6 +52,7 @@ def init_wifi(ssid, passwd):
 
 class LotinaEngine:
     def __init__(self, song_url, publisher):
+        self._initialized = False
         self._publisher = publisher
         self._song_url = song_url
         self._prediction = 0
@@ -67,6 +68,7 @@ class LotinaEngine:
         client.subscribe(f"{topic_prefix}/prediction".encode())
         client.subscribe(f"{topic_prefix}/enabled".encode())
         client.subscribe(f"{topic_prefix}/set_enabled".encode())
+        self._initialized = True
         self._transit_to_idle()
 
     def _transit_to(self, state):
@@ -126,12 +128,11 @@ class LotinaEngine:
             if enabled != self._enabled:
                 self._enabled = enabled
                 print("enabled:", self._enabled)
-                self._publisher.publish_enabled(
-                    msg.replace(b"/set_enabled", b"/enabled")
-                )
-                if not self._enabled:
-                    self._publisher.publish_interrupt()
-                    self._transit_to_idle()
+                if self._initialized:
+                    self._publisher.publish_enabled(msg)
+                    if not self._enabled:
+                        self._publisher.publish_interrupt()
+                        self._transit_to_idle()
 
 
 class SamplePublisher:
@@ -241,6 +242,7 @@ def process_messages(
 
     engine = LotinaEngine(song_url, publisher)
     engine.start()
+    print("engine started...")
 
     if discovery_prefix:
         device_name_or_default = device_name or "Lotina"
@@ -260,6 +262,7 @@ def process_messages(
             },
             icon="mdi:hand-wash",
         )
+        print("discovery published...")
 
     while True:
         publisher.keepalive()
