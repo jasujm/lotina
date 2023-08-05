@@ -243,19 +243,20 @@ def process_messages(
     engine.start()
 
     if discovery_prefix:
+        device_name_or_default = device_name or "Lotina"
         publish_discovery(
             client,
             discovery_prefix,
             "switch",
             f"lotina-{client_id.decode()}-enabled",
             "enabled",
-            name=(device_name or "Lotina"),
+            name=f"{device_name_or_default} Enabled",
             state_topic=publisher._enabled_topic,
             command_topic=publisher._set_enabled_topic,
             availability_topic=publisher._availability_topic,
             device={
                 "identifiers": [client_id],
-                "name": device_name,
+                "name": device_name_or_default,
             },
             icon="mdi:hand-wash",
         )
